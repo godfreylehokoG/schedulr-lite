@@ -8,44 +8,44 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 248 250 252;
-    --foreground: 226 232 240;
+    --background: 15 23 42;
+    --foreground: 248 250 252;
 
-    --card: 255 255 255;
-    --card-foreground: 15 23 42;
+    --card: 30 41 59;
+    --card-foreground: 226 232 240;
 
-    --popover: 255 255 255;
-    --popover-foreground: 15 23 42;
+    --popover: 30 41 59;
+    --popover-foreground: 226 232 240;
 
-    --primary: 219 234 254;
-    --primary-foreground: 30 64 175;
+    --primary: 59 130 246;
+    --primary-foreground: 248 250 252;
 
-    --secondary: 241 245 249;
-    --secondary-foreground: 51 65 85;
+    --secondary: 51 65 85;
+    --secondary-foreground: 226 232 240;
 
-    --muted: 248 250 252;
-    --muted-foreground: 100 116 139;
+    --muted: 51 65 85;
+    --muted-foreground: 148 163 184;
 
-    --accent: 236 253 245;
-    --accent-foreground: 5 150 105;
+    --accent: 6 78 59;
+    --accent-foreground: 167 243 208;
 
     --success: 34 197 94;
     --success-foreground: 255 255 255;
 
     --warning: 251 191 36;
-    --warning-foreground: 120 53 15;
+    --warning-foreground: 15 23 42;
 
-    --available: 167 243 208;
-    --available-foreground: 6 78 59;
+    --available: 6 78 59;
+    --available-foreground: 167 243 208;
 
-    --booked: 252 165 165;
-    --booked-foreground: 127 29 29;
+    --booked: 127 29 29;
+    --booked-foreground: 252 165 165;
 
     --destructive: 239 68 68;
     --destructive-foreground: 255 255 255;
 
-    --border: 226 232 240;
-    --input: 241 245 249;
+    --border: 51 65 85;
+    --input: 51 65 85;
     --ring: 59 130 246;
 
     --radius: 0.5rem;
