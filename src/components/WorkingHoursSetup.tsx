@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useBooking } from '@/contexts/BookingContext';
-import { Clock, Settings } from 'lucide-react';
+import { GoogleCalendarIntegration } from '@/components/GoogleCalendarIntegration';
+import { Clock, Settings, Mail } from 'lucide-react';
 
 const DAYS = [
   'Sunday',
@@ -90,17 +91,40 @@ export const WorkingHoursSetup: React.FC = () => {
               </Select>
             </div>
           </div>
-          <div>
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={settings.description}
-              onChange={(e) => updateSettings({ description: e.target.value })}
-              placeholder="Brief description of your service"
-            />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Input
+                id="description"
+                value={settings.description}
+                onChange={(e) => updateSettings({ description: e.target.value })}
+                placeholder="Brief description of your service"
+              />
+            </div>
+            <div>
+              <Label htmlFor="ownerEmail" className="flex items-center gap-2">
+                <Mail className="h-4 w-4" />
+                Notification Email
+              </Label>
+              <Input
+                id="ownerEmail"
+                type="email"
+                value={settings.ownerEmail || ''}
+                onChange={(e) => updateSettings({ ownerEmail: e.target.value })}
+                placeholder="owner@example.com"
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                You'll receive booking notifications at this email
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Google Calendar Integration */}
+      <GoogleCalendarIntegration />
 
       <Card>
         <CardHeader>

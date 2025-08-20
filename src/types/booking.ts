@@ -1,3 +1,11 @@
+export interface BookingSettings {
+  slotDuration: number;
+  workingHours: WorkingHours[];
+  businessName: string;
+  description: string;
+  ownerEmail?: string; // Add this field
+}
+
 export interface TimeSlot {
   id: string;
   date: string;
