@@ -1,4 +1,4 @@
-# Welcome to your ZeroBook a booking System Zero Inex
+# Welcome to your ZeroBook a booking System Zero Index
 
 ## Project info
 
