@@ -1,9 +1,24 @@
+export type BookingStatus = 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+
+export interface WorkingHours {
+  day: number;
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+}
+
 export interface BookingSettings {
+  businessId?: string;
+  slug?: string;
   slotDuration: number;
   workingHours: WorkingHours[];
   businessName: string;
   description: string;
-  ownerEmail?: string; // Add this field
+  timezone: string;
+  ownerEmail?: string;
+  turnstileRequired?: boolean;
+  turnstileSiteKey?: string;
+  googleClientId?: string;
 }
 
 export interface TimeSlot {
@@ -11,31 +26,63 @@ export interface TimeSlot {
   date: string;
   startTime: string;
   endTime: string;
+  startUtc: string;
+  endUtc: string;
   isBooked: boolean;
   bookedBy?: string;
   bookedAt?: Date;
-}
-
-export interface WorkingHours {
-  day: number; // 0 = Sunday, 1 = Monday, etc.
-  enabled: boolean;
-  startTime: string;
-  endTime: string;
-}
-
-export interface BookingSettings {
-  slotDuration: number; // in minutes
-  workingHours: WorkingHours[];
-  businessName: string;
-  description: string;
+  bookingId?: string;
+  status?: BookingStatus;
 }
 
 export interface Booking {
   id: string;
+  businessId: string;
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
-  timeSlot: TimeSlot;
   notes?: string;
+  appointmentStartUtc: string;
+  appointmentEndUtc: string;
+  timeSlot: TimeSlot;
+  status: BookingStatus;
   createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface BookingConfirmation {
+  id: string;
+  businessName: string;
+  status: BookingStatus;
+  date: string;
+  startTime: string;
+  endTime: string;
+  appointmentStartUtc: string;
+  appointmentEndUtc: string;
+  manageUrl?: string;
+  googleCalendarUrl?: string;
+}
+
+export interface ManagedBooking {
+  id: string;
+  businessId: string;
+  businessSlug: string;
+  businessName: string;
+  timezone: string;
+  status: BookingStatus;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  notes?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  appointmentStartUtc: string;
+  appointmentEndUtc: string;
+  manageUrl: string;
+  googleCalendarUrl: string;
+  canCancel: boolean;
+  canReschedule: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

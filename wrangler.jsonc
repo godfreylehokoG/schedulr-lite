@@ -1,0 +1,74 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "zerobooker",
+  "main": "./worker/src/index.ts",
+  "compatibility_date": "2026-08-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "secrets": {
+    "required": ["TURNSTILE_SECRET_KEY"]
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "remote": true
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development",
+    "PUBLIC_ORIGIN": "http://localhost:8787,http://127.0.0.1:8787,http://localhost:8080,http://127.0.0.1:8080",
+    "PUBLIC_APP_URL": "http://127.0.0.1:8787",
+    "ACCESS_TEAM_DOMAIN": "your-team.cloudflareaccess.com",
+    "ACCESS_AUD": "your-access-aud-tag",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAEJh4X6qGQWUW2kZ",
+    "GOOGLE_CLIENT_ID": "498357197828-0pputmkmq3deeviv4eudsnqincu7bnr9.apps.googleusercontent.com",
+    "EMAIL_FROM_ADDRESS": "bookings@zeroindex.co.za",
+    "DEFAULT_OWNER_EMAIL": "lehoko.lg@gmail.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "zero-booker",
+      "database_id": "df4b7396-ac9e-4642-80d5-ddb4507bc7bd",
+      "preview_database_id": "zero-booker-local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "env": {
+    "production": {
+      "secrets": {
+        "required": ["TURNSTILE_SECRET_KEY"]
+      },
+      "vars": {
+        "ENVIRONMENT": "production",
+        "PUBLIC_ORIGIN": "https://zerobooker-production.zero-index-prospect-engine.workers.dev",
+        "PUBLIC_APP_URL": "https://zerobooker-production.zero-index-prospect-engine.workers.dev",
+        "ACCESS_TEAM_DOMAIN": "your-team.cloudflareaccess.com",
+        "ACCESS_AUD": "your-access-aud-tag",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEJh4X6qGQWUW2kZ",
+        "GOOGLE_CLIENT_ID": "498357197828-0pputmkmq3deeviv4eudsnqincu7bnr9.apps.googleusercontent.com",
+        "EMAIL_FROM_ADDRESS": "bookings@zeroindex.co.za",
+        "DEFAULT_OWNER_EMAIL": "lehoko.lg@gmail.com"
+      },
+      "send_email": [
+        {
+          "name": "EMAIL",
+          "remote": true
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "zero-booker",
+          "database_id": "df4b7396-ac9e-4642-80d5-ddb4507bc7bd",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}

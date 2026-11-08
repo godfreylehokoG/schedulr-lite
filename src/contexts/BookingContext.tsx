@@ -1,130 +1,306 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { BookingSettings, TimeSlot, Booking, WorkingHours } from '@/types/booking';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import {
+  Booking,
+  BookingConfirmation,
+  BookingSettings,
+  BookingStatus,
+  TimeSlot,
+  WorkingHours,
+} from '@/types/booking';
+import { addDays, api, getOwnerAuthToken, toIsoDate } from '@/lib/api';
+
+type BookingMode = 'public' | 'owner';
+
+interface BookingDraft {
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  notes?: string;
+}
 
 interface BookingContextType {
+  mode: BookingMode;
   settings: BookingSettings;
   updateSettings: (settings: Partial<BookingSettings>) => void;
+  saveSettings: () => Promise<void>;
+  saveWorkingHours: (workingHours: WorkingHours[]) => Promise<void>;
   timeSlots: TimeSlot[];
   bookings: Booking[];
-  bookTimeSlot: (slotId: string, booking: Omit<Booking, 'id' | 'timeSlot' | 'createdAt'>) => void;
-  generateTimeSlots: (startDate: Date, endDate: Date) => void;
+  bookTimeSlot: (
+    slotId: string,
+    booking: BookingDraft,
+    turnstileToken: string | undefined,
+    idempotencyKey: string,
+  ) => Promise<BookingConfirmation>;
+  generateTimeSlots: (startDate: Date, endDate: Date) => Promise<void>;
+  refresh: () => Promise<void>;
+  updateBookingStatus: (bookingId: string, status: BookingStatus) => Promise<void>;
   isOwnerMode: boolean;
-  setIsOwnerMode: (isOwner: boolean) => void;
+  loading: boolean;
+  loadingAvailability: boolean;
+  saving: boolean;
+  error: string | null;
+  authError: string | null;
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
 const defaultWorkingHours: WorkingHours[] = [
-  { day: 0, enabled: false, startTime: '09:00', endTime: '17:00' }, // Sunday
-  { day: 1, enabled: true, startTime: '09:00', endTime: '17:00' },  // Monday
-  { day: 2, enabled: true, startTime: '09:00', endTime: '17:00' },  // Tuesday
-  { day: 3, enabled: true, startTime: '09:00', endTime: '17:00' },  // Wednesday
-  { day: 4, enabled: true, startTime: '09:00', endTime: '17:00' },  // Thursday
-  { day: 5, enabled: true, startTime: '09:00', endTime: '17:00' },  // Friday
-  { day: 6, enabled: false, startTime: '09:00', endTime: '17:00' }, // Saturday
+  { day: 0, enabled: false, startTime: '09:00', endTime: '17:00' },
+  { day: 1, enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 2, enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 3, enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 4, enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 5, enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 6, enabled: false, startTime: '09:00', endTime: '17:00' },
 ];
 
 const defaultSettings: BookingSettings = {
   slotDuration: 30,
   workingHours: defaultWorkingHours,
-  businessName: 'My Business',
-  description: 'Book an appointment with us',
+  businessName: 'ZeroBooker',
+  description: 'Book an appointment with Zero Index',
+  timezone: 'Africa/Johannesburg',
+  slug: 'zero-booker',
+  turnstileRequired: false,
+  turnstileSiteKey: '',
+  googleClientId: '',
 };
 
-export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface BookingProviderProps {
+  children: React.ReactNode;
+  mode?: BookingMode;
+  slug?: string;
+  businessId?: string;
+}
+
+export const BookingProvider: React.FC<BookingProviderProps> = ({
+  children,
+  mode = 'public',
+  slug = 'zero-booker',
+  businessId,
+}) => {
   const [settings, setSettings] = useState<BookingSettings>(defaultSettings);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [isOwnerMode, setIsOwnerMode] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  const updateSettings = (newSettings: Partial<BookingSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
-  };
+  const loadAvailability = useCallback(
+    async (targetSlug: string, ownerBookings: Booking[] = []) => {
+      setLoadingAvailability(true);
+      const from = toIsoDate(new Date());
+      const to = toIsoDate(addDays(new Date(), 30));
 
-  const generateTimeSlots = (startDate: Date, endDate: Date) => {
-    const slots: TimeSlot[] = [];
-    const currentDate = new Date(startDate);
+      try {
+        const slots = await api.getAvailability(targetSlug, from, to);
+        setTimeSlots(mode === 'owner' ? decorateSlots(slots, ownerBookings) : slots);
+      } finally {
+        setLoadingAvailability(false);
+      }
+    },
+    [mode],
+  );
 
-    while (currentDate <= endDate) {
-      const dayOfWeek = currentDate.getDay();
-      const workingHour = settings.workingHours.find(wh => wh.day === dayOfWeek);
+  const loadPublic = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setAuthError(null);
 
-      if (workingHour && workingHour.enabled) {
-        const startTime = new Date(currentDate);
-        const [startHour, startMinute] = workingHour.startTime.split(':').map(Number);
-        startTime.setHours(startHour, startMinute, 0, 0);
+    try {
+      const publicSettings = await api.getPublicBusiness(slug);
+      setSettings((prev) => ({ ...prev, ...publicSettings }));
+      setBookings([]);
+      await loadAvailability(publicSettings.slug || slug, []);
+    } catch (err) {
+      setError(messageFromError(err, 'Could not load booking availability.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [loadAvailability, slug]);
 
-        const endTime = new Date(currentDate);
-        const [endHour, endMinute] = workingHour.endTime.split(':').map(Number);
-        endTime.setHours(endHour, endMinute, 0, 0);
+  const loadOwner = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setAuthError(null);
 
-        let slotStart = new Date(startTime);
-        while (slotStart < endTime) {
-          const slotEnd = new Date(slotStart.getTime() + settings.slotDuration * 60000);
-          if (slotEnd <= endTime) {
-            const slotId = `${currentDate.toDateString()}-${slotStart.toTimeString().slice(0, 5)}`;
-            const existingBooking = bookings.find(b => b.timeSlot.id === slotId);
-            
-            slots.push({
-              id: slotId,
-              date: currentDate.toDateString(),
-              startTime: slotStart.toTimeString().slice(0, 5),
-              endTime: slotEnd.toTimeString().slice(0, 5),
-              isBooked: !!existingBooking,
-              bookedBy: existingBooking?.customerName,
-              bookedAt: existingBooking?.createdAt,
-            });
-          }
-          slotStart = new Date(slotStart.getTime() + settings.slotDuration * 60000);
-        }
+    try {
+      if (shouldPromptForOwnerSignIn()) {
+        const publicSettings = await api.getPublicBusiness(slug);
+        setSettings((prev) => ({ ...prev, ...publicSettings }));
+        setBookings([]);
+        setTimeSlots([]);
+        setAuthError('Owner sign-in is required.');
+        return;
       }
 
-      currentDate.setDate(currentDate.getDate() + 1);
+      const businesses = await api.getOwnerBusinesses();
+      const selectedBusiness = businessId
+        ? businesses.find((business) => business.id === businessId)
+        : businesses[0];
+
+      if (!selectedBusiness) {
+        setAuthError('You are signed in, but no ZeroBooker business membership was found.');
+        setBookings([]);
+        setTimeSlots([]);
+        return;
+      }
+
+      const ownerSettings = await api.getOwnerSettings(selectedBusiness.id);
+      const ownerBookings = await api.getOwnerBookings(selectedBusiness.id);
+      setSettings((prev) => ({ ...prev, ...ownerSettings }));
+      setBookings(ownerBookings);
+      await loadAvailability(ownerSettings.slug || selectedBusiness.slug, ownerBookings);
+    } catch (err) {
+      const message = messageFromError(err, 'Owner access could not be loaded.');
+      if (isAuthError(err)) {
+        setAuthError(message);
+        try {
+          const publicSettings = await api.getPublicBusiness(slug);
+          setSettings((prev) => ({ ...prev, ...publicSettings }));
+        } catch {
+          // Keep the auth prompt usable even if public metadata is temporarily unavailable.
+        }
+      } else {
+        setError(message);
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setTimeSlots(slots);
-  };
-
-  const bookTimeSlot = (slotId: string, bookingData: Omit<Booking, 'id' | 'timeSlot' | 'createdAt'>) => {
-    const slot = timeSlots.find(s => s.id === slotId);
-    if (!slot || slot.isBooked) return;
-
-    const newBooking: Booking = {
-      id: `booking-${Date.now()}`,
-      ...bookingData,
-      timeSlot: { ...slot, isBooked: true, bookedBy: bookingData.customerName, bookedAt: new Date() },
-      createdAt: new Date(),
-    };
-
-    setBookings(prev => [...prev, newBooking]);
-    setTimeSlots(prev => prev.map(slot => 
-      slot.id === slotId 
-        ? { ...slot, isBooked: true, bookedBy: bookingData.customerName, bookedAt: new Date() }
-        : slot
-    ));
-  };
+  }, [businessId, loadAvailability]);
 
   useEffect(() => {
-    // Generate slots for the next 30 days
-    const today = new Date();
-    const thirtyDaysLater = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-    generateTimeSlots(today, thirtyDaysLater);
-  }, [settings]);
+    if (mode === 'owner') {
+      void loadOwner();
+    } else {
+      void loadPublic();
+    }
+  }, [loadOwner, loadPublic, mode]);
 
-  return (
-    <BookingContext.Provider value={{
-      settings,
-      updateSettings,
-      timeSlots,
-      bookings,
-      bookTimeSlot,
-      generateTimeSlots,
-      isOwnerMode,
-      setIsOwnerMode,
-    }}>
-      {children}
-    </BookingContext.Provider>
-  );
+  const updateSettings = (newSettings: Partial<BookingSettings>) => {
+    setSettings((prev) => ({ ...prev, ...newSettings }));
+  };
+
+  const saveSettings = async () => {
+    if (!settings.businessId) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await api.updateOwnerSettings(settings);
+      setSettings((prev) => ({ ...prev, ...saved }));
+      await loadAvailability(saved.slug || settings.slug || slug, bookings);
+    } catch (err) {
+      setError(messageFromError(err, 'Settings could not be saved.'));
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveWorkingHours = async (workingHours: WorkingHours[]) => {
+    if (!settings.businessId) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await api.updateOwnerWorkingHours(settings.businessId, workingHours);
+      setSettings((prev) => ({ ...prev, workingHours: saved }));
+      await loadAvailability(settings.slug || slug, bookings);
+    } catch (err) {
+      setError(messageFromError(err, 'Working hours could not be saved.'));
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const bookTimeSlot = async (
+    slotId: string,
+    bookingData: BookingDraft,
+    turnstileToken: string | undefined,
+    idempotencyKey: string,
+  ) => {
+    const slot = timeSlots.find((entry) => entry.id === slotId);
+    if (!slot || slot.isBooked) {
+      throw new Error('This time has just been booked. Please choose another slot.');
+    }
+
+    const confirmation = await api.createBooking(settings.slug || slug, {
+      slotStartUtc: slot.startUtc,
+      ...bookingData,
+      turnstileToken,
+      idempotencyKey,
+    });
+
+    await loadAvailability(settings.slug || slug, bookings);
+    return confirmation;
+  };
+
+  const generateTimeSlots = async (startDate: Date, endDate: Date) => {
+    await loadAvailabilityForRange(
+      settings.slug || slug,
+      startDate,
+      endDate,
+      mode === 'owner' ? bookings : [],
+      setLoadingAvailability,
+      setTimeSlots,
+      mode,
+    );
+  };
+
+  const refresh = async () => {
+    if (mode === 'owner') {
+      await loadOwner();
+    } else {
+      await loadPublic();
+    }
+  };
+
+  const updateBookingStatus = async (bookingId: string, status: BookingStatus) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateBookingStatus(bookingId, status);
+      const nextBookings = bookings.map((booking) => (booking.id === bookingId ? updated : booking));
+      setBookings(nextBookings);
+      setTimeSlots((slots) => decorateSlots(slots, nextBookings));
+    } catch (err) {
+      setError(messageFromError(err, 'Booking status could not be updated.'));
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const value: BookingContextType = {
+    mode,
+    settings,
+    updateSettings,
+    saveSettings,
+    saveWorkingHours,
+    timeSlots,
+    bookings,
+    bookTimeSlot,
+    generateTimeSlots,
+    refresh,
+    updateBookingStatus,
+    isOwnerMode: mode === 'owner',
+    loading,
+    loadingAvailability,
+    saving,
+    error,
+    authError,
+  };
+
+  return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>;
 };
 
 export const useBooking = () => {
@@ -134,3 +310,67 @@ export const useBooking = () => {
   }
   return context;
 };
+
+function decorateSlots(slots: TimeSlot[], bookings: Booking[]): TimeSlot[] {
+  const activeBookings = new Map(
+    bookings
+      .filter((booking) => booking.status === 'confirmed')
+      .map((booking) => [booking.appointmentStartUtc, booking]),
+  );
+
+  return slots.map((slot) => {
+    const booking = activeBookings.get(slot.startUtc);
+    if (!booking) {
+      return { ...slot, bookedBy: undefined, bookingId: undefined, status: undefined };
+    }
+
+    return {
+      ...slot,
+      isBooked: true,
+      bookedBy: booking.customerName,
+      bookedAt: booking.createdAt,
+      bookingId: booking.id,
+      status: booking.status,
+    };
+  });
+}
+
+async function loadAvailabilityForRange(
+  slug: string,
+  startDate: Date,
+  endDate: Date,
+  bookings: Booking[],
+  setLoadingAvailability: (loading: boolean) => void,
+  setTimeSlots: (slots: TimeSlot[]) => void,
+  mode: BookingMode,
+) {
+  setLoadingAvailability(true);
+  try {
+    const slots = await api.getAvailability(slug, toIsoDate(startDate), toIsoDate(endDate));
+    setTimeSlots(mode === 'owner' ? decorateSlots(slots, bookings) : slots);
+  } finally {
+    setLoadingAvailability(false);
+  }
+}
+
+function isAuthError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'status' in error
+    ? [401, 403].includes(Number((error as { status: number }).status))
+    : false;
+}
+
+function messageFromError(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function shouldPromptForOwnerSignIn(): boolean {
+  if (getOwnerAuthToken()) {
+    return false;
+  }
+
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return !['localhost', '127.0.0.1'].includes(window.location.hostname);
+}

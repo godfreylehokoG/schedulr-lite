@@ -1,20 +1,15 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBooking } from '@/contexts/BookingContext';
 import { useToast } from '@/hooks/use-toast';
-import { useEmailNotifications } from '@/hooks/useEmailNotifications';
-import { insertGoogleCalendarEvent, downloadIcsFile } from '@/lib/calendarUtils';
-import { createClient } from '@supabase/supabase-js';
-import { User, Mail, Phone, MessageSquare, Calendar, Clock, Loader2, Download } from 'lucide-react';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL!,
-  import.meta.env.VITE_SUPABASE_ANON_KEY!
-);
+import { downloadIcsFile } from '@/lib/calendarUtils';
+import { ApiError } from '@/lib/api';
+import { TurnstileWidget } from '@/components/TurnstileWidget';
+import { GoogleQuickFillButton } from '@/components/GoogleQuickFillButton';
+import { User, Mail, Phone, MessageSquare, Calendar, Clock, Loader2 } from 'lucide-react';
 
 interface BookingFormProps {
   selectedSlotId: string;
@@ -22,10 +17,10 @@ interface BookingFormProps {
 }
 
 export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClose }) => {
-  const { timeSlots, bookTimeSlot, settings, bookings } = useBooking();
+  const { timeSlots, bookTimeSlot, settings } = useBooking();
   const { toast } = useToast();
-  const { sendBookingEmails, sending } = useEmailNotifications();
   const [submitting, setSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [formData, setFormData] = useState({
     customerName: '',
     customerEmail: '',
@@ -33,16 +28,42 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
     notes: '',
   });
 
-  const selectedSlot = timeSlots.find(slot => slot.id === selectedSlotId);
+  const selectedSlot = timeSlots.find((slot) => slot.id === selectedSlotId);
+  const turnstileRequired = Boolean(settings.turnstileRequired);
+  const canSubmit = !submitting && (!turnstileRequired || Boolean(turnstileToken));
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleGoogleProfile = useCallback(
+    (profile: { name: string; email: string }) => {
+      setFormData((prev) => ({
+        ...prev,
+        customerName: prev.customerName || profile.name,
+        customerEmail: profile.email,
+      }));
+      toast({
+        title: 'Details filled',
+        description: 'Your Google profile filled the booking form.',
+      });
+    },
+    [toast],
+  );
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
     if (!formData.customerName || !formData.customerEmail) {
       toast({
-        title: "Missing Information",
-        description: "Please fill in your name and email address.",
-        variant: "destructive",
+        title: 'Missing Information',
+        description: 'Please fill in your name and email address.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (turnstileRequired && !turnstileToken) {
+      toast({
+        title: 'Verification needed',
+        description: 'Please complete booking verification.',
+        variant: 'destructive',
       });
       return;
     }
@@ -50,72 +71,60 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
     setSubmitting(true);
 
     try {
-      // 1. Create the booking
-      bookTimeSlot(selectedSlotId, formData);
-      
-      // Get the booking that was just created
-      const newBooking = {
-        id: `booking-${Date.now()}`,
+      const confirmation = await bookTimeSlot(
+        selectedSlotId,
+        formData,
+        turnstileRequired ? turnstileToken : 'dev-turnstile-token',
+        crypto.randomUUID(),
+      );
+
+      toast({
+        title: 'Booking Confirmed!',
+        description: confirmation.manageUrl
+          ? `Your appointment is scheduled for ${confirmation.date} at ${confirmation.startTime}. Confirmation email sent.`
+          : `Your appointment is scheduled for ${confirmation.date} at ${confirmation.startTime}.`,
+      });
+
+      const calendarBooking = {
+        id: confirmation.id,
+        businessId: settings.businessId || '',
         ...formData,
-        timeSlot: selectedSlot!,
+        appointmentStartUtc: confirmation.appointmentStartUtc,
+        appointmentEndUtc: confirmation.appointmentEndUtc,
+        timeSlot: {
+          ...selectedSlot!,
+          date: confirmation.date,
+          startTime: confirmation.startTime,
+          endTime: confirmation.endTime,
+          isBooked: true,
+          bookedBy: formData.customerName,
+          bookedAt: new Date(),
+        },
+        status: confirmation.status,
         createdAt: new Date(),
       };
 
-      // 2. Send email notifications
-      const emailResult = await sendBookingEmails({
-        booking: newBooking,
-        businessName: settings.businessName,
-        ownerEmail: settings.ownerEmail,
-        customerEmail: formData.customerEmail,
-      });
-
-      // 3. Try to sync with Google Calendar (if owner is logged in)
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.provider_token) {
-          const calendarResult = await insertGoogleCalendarEvent(
-            session.provider_token,
-            newBooking,
-            settings.businessName
-          );
-          
-          if (!calendarResult.success) {
-            console.error('Failed to sync with Google Calendar:', calendarResult.error);
-          }
-        }
-      } catch (calendarError) {
-        // Don't fail the booking if calendar sync fails
-        console.error('Calendar sync error:', calendarError);
-      }
-
-      // 4. Show success message
-      toast({
-        title: "Booking Confirmed!",
-        description: (
-          <div className="space-y-2">
-            <p>Your appointment has been scheduled for {selectedSlot?.date} at {selectedSlot?.startTime}.</p>
-            {emailResult.success && (
-              <p className="text-sm">A confirmation email has been sent to {formData.customerEmail}</p>
-            )}
-          </div>
-        ),
-      });
-
-      // 5. Offer to download ICS file
       setTimeout(() => {
         if (window.confirm('Would you like to download a calendar file for this appointment?')) {
-          downloadIcsFile(newBooking, settings.businessName);
+          downloadIcsFile(calendarBooking, settings.businessName);
         }
-      }, 500);
+      }, 300);
 
       onClose();
     } catch (error) {
-      console.error('Booking error:', error);
+      const description =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'There was an error processing your booking. Please try again.';
+
       toast({
-        title: "Booking Failed",
-        description: "There was an error processing your booking. Please try again.",
-        variant: "destructive",
+        title: error instanceof ApiError && error.code === 'slot_conflict' ? 'Time Unavailable' : 'Booking Failed',
+        description,
+        variant: 'destructive',
       });
+      setTurnstileToken('');
     } finally {
       setSubmitting(false);
     }
@@ -126,9 +135,9 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle>Book Your Appointment</CardTitle>
+    <div className="mx-auto w-full max-w-md">
+      <div className="mb-5 space-y-2">
+        <h3 className="text-lg font-semibold">Book Your Appointment</h3>
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
@@ -136,12 +145,20 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
           </div>
           <div className="flex items-center gap-1">
             <Clock className="h-4 w-4" />
-            <span>{selectedSlot.startTime} - {selectedSlot.endTime}</span>
+            <span>
+              {selectedSlot.startTime} - {selectedSlot.endTime}
+            </span>
           </div>
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <GoogleQuickFillButton
+            clientId={settings.googleClientId}
+            disabled={submitting}
+            onProfile={handleGoogleProfile}
+          />
+
           <div className="space-y-2">
             <Label htmlFor="name" className="flex items-center gap-2">
               <User className="h-4 w-4" />
@@ -150,8 +167,10 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
             <Input
               id="name"
               value={formData.customerName}
-              onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
-                            placeholder="Enter your full name"
+              onChange={(event) =>
+                setFormData((prev) => ({ ...prev, customerName: event.target.value }))
+              }
+              placeholder="Enter your full name"
               required
               disabled={submitting}
             />
@@ -166,7 +185,9 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
               id="email"
               type="email"
               value={formData.customerEmail}
-              onChange={(e) => setFormData(prev => ({ ...prev, customerEmail: e.target.value }))}
+              onChange={(event) =>
+                setFormData((prev) => ({ ...prev, customerEmail: event.target.value }))
+              }
               placeholder="Enter your email address"
               required
               disabled={submitting}
@@ -182,7 +203,9 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
               id="phone"
               type="tel"
               value={formData.customerPhone}
-              onChange={(e) => setFormData(prev => ({ ...prev, customerPhone: e.target.value }))}
+              onChange={(event) =>
+                setFormData((prev) => ({ ...prev, customerPhone: event.target.value }))
+              }
               placeholder="Enter your phone number"
               disabled={submitting}
             />
@@ -196,31 +219,35 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
             <Textarea
               id="notes"
               value={formData.notes}
-              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              onChange={(event) => setFormData((prev) => ({ ...prev, notes: event.target.value }))}
               placeholder="Any additional information or special requests"
               className="min-h-[100px]"
               disabled={submitting}
             />
           </div>
 
+          {turnstileRequired && settings.turnstileSiteKey ? (
+            <TurnstileWidget
+              siteKey={settings.turnstileSiteKey}
+              onVerify={setTurnstileToken}
+              onExpire={() => setTurnstileToken('')}
+            />
+          ) : null}
+
           <div className="flex gap-2 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={onClose} 
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
               className="flex-1"
               disabled={submitting}
             >
               Cancel
             </Button>
-            <Button 
-              type="submit" 
-              className="flex-1 bg-success hover:bg-success/90"
-              disabled={submitting}
-            >
+            <Button type="submit" className="flex-1" disabled={!canSubmit}>
               {submitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Processing...
                 </>
               ) : (
@@ -229,7 +256,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({ selectedSlotId, onClos
             </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };

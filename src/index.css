@@ -2,51 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ZeroBooker design tokens. All colors are HSL. */
 
 @layer base {
   :root {
-    --background: 240 39% 10%;
-    --foreground: 220 14% 91%;
+    --background: 0 0% 97%;
+    --foreground: 0 0% 5%;
 
-    --card: 240 43% 7%;
-    --card-foreground: 220 14% 91%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 5%;
 
-    --popover: 240 43% 7%;
-    --popover-foreground: 220 14% 91%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 5%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 220 14% 91%;
+    --primary: 0 0% 5%;
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 262 83% 66%;
-    --secondary-foreground: 220 14% 91%;
+    --secondary: 0 0% 92%;
+    --secondary-foreground: 0 0% 5%;
 
-    --muted: 240 43% 7%;
-    --muted-foreground: 220 14% 66%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 40%;
 
-    --accent: 188 95% 43%;
-    --accent-foreground: 220 14% 91%;
+    --accent: 0 0% 90%;
+    --accent-foreground: 0 0% 5%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 220 14% 91%;
+    --success: 0 0% 5%;
+    --success-foreground: 0 0% 98%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 240 39% 10%;
+    --warning: 0 0% 22%;
+    --warning-foreground: 0 0% 98%;
 
-    --available: 142 76% 36%;
-    --available-foreground: 220 14% 91%;
+    --available: 0 0% 5%;
+    --available-foreground: 0 0% 5%;
 
-    --booked: 0 84% 60%;
-    --booked-foreground: 220 14% 91%;
+    --booked: 0 0% 82%;
+    --booked-foreground: 0 0% 5%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 220 14% 91%;
+    --destructive: 0 0% 5%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 240 43% 15%;
-    --input: 240 43% 15%;
-    --ring: 217 91% 60%;
+    --border: 0 0% 86%;
+    --input: 0 0% 86%;
+    --ring: 0 0% 5%;
 
     --radius: 0.5rem;
 
@@ -68,33 +66,33 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 96%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 96%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 5%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 96%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 64%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 0 0% 18%;
+    --accent-foreground: 0 0% 96%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 0% 96%;
+    --destructive-foreground: 0 0% 5%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 0 0% 96%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -112,6 +110,15 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    min-height: 100vh;
+    background:
+      linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 97%) 42%, hsl(0 0% 94%) 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    letter-spacing: 0;
+  }
+
+  ::selection {
+    @apply bg-foreground text-background;
   }
 }
